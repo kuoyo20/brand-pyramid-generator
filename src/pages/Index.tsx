@@ -57,12 +57,12 @@ const Index = () => {
     }
     setIsGenerating(true);
     try {
-      const data = await callApi("/api/generate-pyramid", {
-        companyName: name,
-        companyContext: profile,
-        masterVoice,
-      });
-      setPyramid(data.pyramid);
+      const payload = { companyName: name, companyContext: profile, masterVoice };
+      const [coreData, posData] = await Promise.all([
+        callApi("/api/generate-pyramid", payload),
+        callApi("/api/generate-positioning", payload),
+      ]);
+      setPyramid({ ...coreData.pyramid, positioning: posData.positioning });
       toast.success("品牌金字塔已生成");
       setTimeout(() => document.getElementById("result")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
