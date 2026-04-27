@@ -103,8 +103,8 @@ export default async function handler(req: Request): Promise<Response> {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-haiku-4-5",
-        max_tokens: 3072,
+        model: "claude-sonnet-4-6",
+        max_tokens: 4096,
         system: systemPrompt,
         tools: [{ name: "positioning_analysis", description: "Return market positioning analysis", input_schema: SCHEMA }],
         tool_choice: { type: "tool", name: "positioning_analysis" },
@@ -124,11 +124,55 @@ export default async function handler(req: Request): Promise<Response> {
     const toolUse = data.content?.find((c: { type: string }) => c.type === "tool_use");
     if (!toolUse) return json({ error: "Claude 未回傳結構化結果" }, 500);
 
-    return json({ positioning: toolUse.input });
+    const positioning = normalizePositioning(toolUse.input);
+    if (!positioning) return json({ error: "Claude 回傳的結構不正確" }, 500);
+
+    return json({ positioning });
   } catch (e) {
     console.error("generate-positioning error", e);
     return json({ error: e instanceof Error ? e.message : "Unknown error" }, 500);
   }
+}
+
+interface PositioningShape {
+  maps: unknown[];
+  coreCompetencies: { yAxisLabels: string[]; summary: string };
+}
+
+// Defensive: Claude haiku sometimes serializes the maps array as a JSON string
+// containing both `maps` and `coreCompetencies`. Re-parse if so.
+function normalizePositioning(input: unknown): PositioningShape | null {
+  if (!input || typeof input !== "object") return null;
+  const obj = input as Record<string, unknown>;
+  let maps = obj.maps;
+  let core = obj.coreCompetencies;
+
+  if (typeof maps === "string") {
+    try {
+      const wrapped = JSON.parse(`{"maps":${maps as string}${core === undefined ? `,"coreCompetencies":${(obj as Record<string, unknown>).coreCompetencies ?? "null"}` : ""}}`);
+      if (Array.isArray(wrapped.maps)) maps = wrapped.maps;
+      if (wrapped.coreCompetencies) core = wrapped.coreCompetencies;
+    } catch {
+      // try plain parse of string content
+      try {
+        const parsed = JSON.parse(maps as string);
+        if (Array.isArray(parsed)) maps = parsed;
+        else if (parsed && typeof parsed === "object") {
+          if (Array.isArray(parsed.maps)) maps = parsed.maps;
+          if (parsed.coreCompetencies) core = parsed.coreCompetencies;
+        }
+      } catch {
+        return null;
+      }
+    }
+  }
+
+  if (typeof core === "string") {
+    try { core = JSON.parse(core as string); } catch { /* ignore */ }
+  }
+
+  if (!Array.isArray(maps) || !core || typeof core !== "object") return null;
+  return { maps, coreCompetencies: core as PositioningShape["coreCompetencies"] };
 }
 
 function json(body: unknown, status = 200): Response {
