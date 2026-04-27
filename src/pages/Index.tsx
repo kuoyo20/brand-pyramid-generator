@@ -20,15 +20,32 @@ const Index = () => {
   const [isLooking, setIsLooking] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  const callApi = async (path: string, body: unknown) => {
-    const resp = await fetch(path, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
-    if (!resp.ok || data?.error) throw new Error(data?.error ?? `HTTP ${resp.status}`);
-    return data;
+  const callApi = async (path: string, body: unknown, attempt = 1): Promise<Record<string, unknown>> => {
+    try {
+      const resp = await fetch(path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
+        cache: "no-store",
+      });
+      const data = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+      if (!resp.ok || data?.error) {
+        const msg = (data?.error as string) ?? `HTTP ${resp.status}`;
+        if (attempt < 2 && (resp.status === 429 || resp.status >= 500)) {
+          await new Promise((r) => setTimeout(r, 1500));
+          return callApi(path, body, attempt + 1);
+        }
+        throw new Error(`${path.split("/").pop()}: ${msg}`);
+      }
+      return data;
+    } catch (e) {
+      if (attempt < 2 && e instanceof TypeError) {
+        await new Promise((r) => setTimeout(r, 1500));
+        return callApi(path, body, attempt + 1);
+      }
+      console.error(`[callApi] ${path} failed:`, e);
+      throw e;
+    }
   };
 
   const lookupCompany = async () => {
@@ -58,15 +75,20 @@ const Index = () => {
     setIsGenerating(true);
     try {
       const payload = { companyName: name, companyContext: profile, masterVoice };
-      const [coreData, posData] = await Promise.all([
+      const [coreRes, posRes] = await Promise.allSettled([
         callApi("/api/generate-pyramid", payload),
         callApi("/api/generate-positioning", payload),
       ]);
-      setPyramid({ ...coreData.pyramid, positioning: posData.positioning });
+      if (coreRes.status === "rejected") throw coreRes.reason;
+      if (posRes.status === "rejected") throw posRes.reason;
+      const core = coreRes.value as { pyramid: Omit<BrandPyramid, "positioning"> };
+      const pos = posRes.value as { positioning: BrandPyramid["positioning"] };
+      setPyramid({ ...core.pyramid, positioning: pos.positioning });
       toast.success("品牌金字塔已生成");
       setTimeout(() => document.getElementById("result")?.scrollIntoView({ behavior: "smooth" }), 100);
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "生成失敗");
+      console.error("[generate] failed:", e);
+      toast.error(e instanceof Error ? e.message : String(e) || "生成失敗");
     } finally {
       setIsGenerating(false);
     }
