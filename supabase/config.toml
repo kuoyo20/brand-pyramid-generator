@@ -1,7 +1,0 @@
-project_id = "tdmhqvhtkqvyxypjafuu"
-
-[functions.company-lookup]
-verify_jwt = false
-
-[functions.generate-pyramid]
-verify_jwt = false

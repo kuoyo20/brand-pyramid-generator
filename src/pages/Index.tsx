@@ -1,6 +1,5 @@
 import { useState } from "react";
 import { Search, Sparkles, RefreshCw, Loader2 } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -21,6 +20,17 @@ const Index = () => {
   const [isLooking, setIsLooking] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
+  const callApi = async (path: string, body: unknown) => {
+    const resp = await fetch(path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => ({ error: `HTTP ${resp.status}` }));
+    if (!resp.ok || data?.error) throw new Error(data?.error ?? `HTTP ${resp.status}`);
+    return data;
+  };
+
   const lookupCompany = async () => {
     const name = companyName.trim();
     if (!name) {
@@ -29,11 +39,7 @@ const Index = () => {
     }
     setIsLooking(true);
     try {
-      const { data, error } = await supabase.functions.invoke("company-lookup", {
-        body: { companyName: name },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
+      const data = await callApi("/api/company-lookup", { companyName: name });
       setProfile(data.profile);
       toast.success(`已帶入「${data.profile?.name ?? name}」資訊`);
     } catch (e) {
@@ -51,15 +57,11 @@ const Index = () => {
     }
     setIsGenerating(true);
     try {
-      const { data, error } = await supabase.functions.invoke("generate-pyramid", {
-        body: {
-          companyName: name,
-          companyContext: profile,
-          masterVoice,
-        },
+      const data = await callApi("/api/generate-pyramid", {
+        companyName: name,
+        companyContext: profile,
+        masterVoice,
       });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
       setPyramid(data.pyramid);
       toast.success("品牌金字塔已生成");
       setTimeout(() => document.getElementById("result")?.scrollIntoView({ behavior: "smooth" }), 100);
