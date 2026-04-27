@@ -1,5 +1,5 @@
 // Vercel serverless function — uses Anthropic Claude API
-export const config = { runtime: "edge" };
+export const config = { runtime: "edge", regions: ["iad1"] };
 
 const MASTER_VOICES: Record<string, string> = {
   kotler: "以 Philip Kotler 行銷管理視角：強調市場區隔、目標客群與價值主張，語言系統化、嚴謹、學術。",
