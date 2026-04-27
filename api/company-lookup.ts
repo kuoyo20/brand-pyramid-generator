@@ -47,7 +47,7 @@ export default async function handler(req: Request): Promise<Response> {
         "content-type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-sonnet-4-6",
+        model: "claude-haiku-4-5",
         max_tokens: 2048,
         system:
           "你是一位資深的品牌研究員。根據使用者提供的公司名稱，輸出該公司的基本資訊。若不確定請依名稱合理推測，並在 confidence 註明 \"low\"。所有文字使用繁體中文。",
